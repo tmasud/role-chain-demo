@@ -1,0 +1,11 @@
+# AWS credentials
+.aws/
+*.pem
+*.key
+
+# CloudFormation outputs
+outputs.json
+
+# Environment variables
+.env
+.env.local

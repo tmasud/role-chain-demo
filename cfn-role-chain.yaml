@@ -1,0 +1,157 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "IAMロール連鎖のデモ: RoleA → RoleB → RoleC"
+
+Parameters:
+  InitialPrincipalArn:
+    Type: String
+    Description: "ロールAを引き受けることができる初期プリンシパルARN"
+
+Resources:
+  # RoleAがアクセスできるS3バケット
+  BucketA:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::AccountId}-role-chain-bucket-a"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # RoleBがアクセスできるS3バケット
+  BucketB:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::AccountId}-role-chain-bucket-b"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # RoleCがアクセスできるS3バケット
+  BucketC:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::AccountId}-role-chain-bucket-c"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ロールA:
+  # 初期プリンシパルが引き受けることができるロール
+  # RoleBを引き受ける権限とBucketAへの読み取り権限を持つ
+  RoleA:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RoleA-Demo
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref InitialPrincipalArn
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AssumeRoleB
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/RoleB-Demo"
+        - PolicyName: S3BucketAReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                Resource:
+                  - !GetAtt BucketA.Arn
+                  - !Sub "${BucketA.Arn}/*"
+
+  # ロールB:
+  # RoleAが引き受けることができるロール
+  # RoleCを引き受ける権限とBucketBへの読み取り権限を持つ
+  RoleB:
+    Type: AWS::IAM::Role
+    DependsOn: RoleA
+    Properties:
+      RoleName: RoleB-Demo
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/RoleA-Demo"
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AssumeRoleC
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/RoleC-Demo"
+        - PolicyName: S3BucketBReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                Resource:
+                  - !GetAtt BucketB.Arn
+                  - !Sub "${BucketB.Arn}/*"
+
+  # ロールC:
+  # RoleBが引き受けることができるロール
+  # BucketCへの読み取り権限を持つ
+  RoleC:
+    Type: AWS::IAM::Role
+    DependsOn: RoleB
+    Properties:
+      RoleName: RoleC-Demo
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/RoleB-Demo"
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3BucketCReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                Resource:
+                  - !GetAtt BucketC.Arn
+                  - !Sub "${BucketC.Arn}/*"
+
+Outputs:
+  BucketAName:
+    Value: !Ref BucketA
+
+  BucketBName:
+    Value: !Ref BucketB
+
+  BucketCName:
+    Value: !Ref BucketC
+
+  RoleAArn:
+    Value: !GetAtt RoleA.Arn
+
+  RoleBArn:
+    Value: !GetAtt RoleB.Arn
+
+  RoleCArn:
+    Value: !GetAtt RoleC.Arn
